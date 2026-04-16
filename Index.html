@@ -45,7 +45,6 @@
             margin: 0 auto;
         }
 
-        /* Header section */
         .header {
             text-align: center;
             margin-bottom: 20px;
@@ -64,7 +63,6 @@
             margin: 0;
         }
 
-        /* Routine section */
         .routine-section {
             background: var(--card-bg);
             padding: 20px 16px;
@@ -161,7 +159,6 @@
             border-radius: 12px;
         }
 
-        /* Buttons */
         .btn-group {
             display: flex;
             gap: 12px;
@@ -204,7 +201,6 @@
             background: #cbd5e1;
         }
 
-        /* Category navigation */
         .category-nav {
             display: flex;
             gap: 10px;
@@ -238,7 +234,6 @@
             transform: scale(0.96);
         }
 
-        /* Library section */
         .library-section {
             background: var(--library-bg);
             padding: 20px 16px;
@@ -375,10 +370,7 @@
                 grid-template-columns: repeat(3, 1fr);
             }
         }
-        .drag-over {
-            background: #d9f0ec;
-            border: 2px solid var(--success);
-        }
+        
         footer {
             text-align: center;
             font-size: 0.7rem;
@@ -417,13 +409,15 @@
         </div>
         <div id="libraryGrid" class="library-grid"></div>
     </div>
-    <footer>🔁 Tap any slot to remove | Long press library card → delete | Share link includes all custom cards</footer>
+    <footer>🔁 Tap any slot to remove | Tap ✕ to delete a card | Share link includes all custom cards</footer>
 </div>
 <div id="toast" class="toast-msg">✨ Copied to clipboard!</div>
 
 <script>
     // ---------- CONFIG ----------
     const SLOT_COUNT = 6;
+    
+    // Default database with reliable image URLs
     const DEFAULT_CATEGORIES = {
         "⏰ Time": [
             { id: "t1", label: 'Wait', img: 'https://cdn-icons-png.flaticon.com/512/2997/2997985.png' },
@@ -453,91 +447,53 @@
         ]
     };
 
-    // Load or init DB
-    let database = JSON.parse(localStorage.getItem('pecs_db_enhanced'));
+    // Load or initialize database from localStorage
+    let database = null;
+    try {
+        const saved = localStorage.getItem('pecs_db_enhanced');
+        if (saved) {
+            database = JSON.parse(saved);
+        }
+    } catch(e) { console.warn(e); }
+    
     if (!database) {
-        database = DEFAULT_CATEGORIES;
+        database = JSON.parse(JSON.stringify(DEFAULT_CATEGORIES));
         localStorage.setItem('pecs_db_enhanced', JSON.stringify(database));
     }
 
-    let state = {
-        routine: Array(SLOT_COUNT).fill(null),
-        currentCategory: Object.keys(database)[0] || "⏰ Time"
-    };
+    // State
+    let routine = Array(SLOT_COUNT).fill(null);
+    let currentCategory = Object.keys(database)[0] || "⏰ Time";
 
-    // Helper: show toast
+    // Helper: show toast message
     function showToast(message, duration = 2000) {
         const toast = document.getElementById('toast');
-        toast.textContent = message || "✨ Copied!";
+        if (!toast) return;
+        toast.textContent = message || "✨ Done!";
         toast.style.opacity = '1';
         setTimeout(() => {
             toast.style.opacity = '0';
         }, duration);
     }
 
-    // Update slot counter
+    // Update slot counter display
     function updateSlotCounter() {
-        const filled = state.routine.filter(s => s !== null).length;
+        const filled = routine.filter(s => s !== null).length;
         const counter = document.getElementById('slotCounter');
         if (counter) counter.innerText = `${filled}/${SLOT_COUNT}`;
     }
 
-    // Persist DB
-    function persistDB() {
+    // Save database to localStorage
+    function saveDatabase() {
         localStorage.setItem('pecs_db_enhanced', JSON.stringify(database));
     }
 
-    // Render everything
-    function render() {
-        const routineEl = document.getElementById('routineGrid');
-        if (!routineEl) return;
-        routineEl.innerHTML = state.routine.map((item, i) => {
-            if (!item) {
-                return `<div class="slot empty" onclick="tryAddFromEmptySlot(${i})" title="Tap to add from library"></div>`;
-            }
-            return `<div class="slot filled" onclick="removeFromSlot(${i})" title="Tap to remove">
-                <div class="pec-card">
-                    <img src="${escapeHtml(item.img)}" alt="${escapeHtml(item.label)}" loading="lazy">
-                    <div class="card-label">${escapeHtml(item.label)}</div>
-                </div>
-            </div>`;
-        }).join('');
-
-        // category nav
-        const navEl = document.getElementById('categoryNav');
-        if (navEl) {
-            const categories = Object.keys(database);
-            if (categories.length === 0) {
-                // fallback: recreate default if empty
-                database = DEFAULT_CATEGORIES;
-                persistDB();
-            }
-            navEl.innerHTML = categories.map(cat => `
-                <button class="folder-btn ${state.currentCategory === cat ? 'active' : ''}" 
-                        onclick="setCategory('${escapeHtml(cat).replace(/'/g, "\\'")}')">${escapeHtml(cat)}</button>
-            `).join('');
-        }
-
-        // library grid
-        const libEl = document.getElementById('libraryGrid');
-        if (libEl) {
-            const currentCards = database[state.currentCategory] || [];
-            let libHtml = currentCards.map((item, idx) => `
-                <div class="lib-card-wrapper" data-card-index="${idx}" data-category="${escapeHtml(state.currentCategory)}">
-                    <div class="del-btn" onclick="deleteFromLibrary('${escapeHtml(state.currentCategory)}', ${idx}, event)">✕</div>
-                    <div class="lib-card" onclick="addToFirstEmptySlot(${JSON.stringify(item).replace(/\\/g, '\\\\')})">
-                        <img src="${escapeHtml(item.img)}" alt="${escapeHtml(item.label)}" loading="lazy">
-                        <div class="card-label">${escapeHtml(item.label)}</div>
-                    </div>
-                </div>
-            `).join('');
-            libHtml += `<div class="add-custom-btn" onclick="addLinkCard()">+ Add</div>`;
-            libEl.innerHTML = libHtml;
-        }
-        updateSlotCounter();
+    // Save routine to localStorage (auto-save)
+    function saveRoutine() {
+        localStorage.setItem('routine_backup_v2', JSON.stringify(routine));
     }
 
-    // helper sanitize
+    // Escape HTML to prevent XSS
     function escapeHtml(str) {
         if (!str) return '';
         return str.replace(/[&<>]/g, function(m) {
@@ -545,25 +501,71 @@
             if (m === '<') return '&lt;';
             if (m === '>') return '&gt;';
             return m;
-        }).replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, function(c) {
-            return c;
         });
     }
 
-    // try add from empty slot click - open category selection? Instead we'll just notify
-    window.tryAddFromEmptySlot = function(slotIndex) {
-        showToast("📌 Tap a card from library below to add", 1500);
+    // Render everything
+    function render() {
+        // Render routine grid
+        const routineEl = document.getElementById('routineGrid');
+        if (routineEl) {
+            routineEl.innerHTML = routine.map((item, i) => {
+                if (!item) {
+                    return `<div class="slot empty" onclick="tryAddHint()" title="Tap a card from library below"></div>`;
+                }
+                return `<div class="slot filled" onclick="removeFromSlot(${i})" title="Tap to remove">
+                    <div class="pec-card">
+                        <img src="${escapeHtml(item.img)}" alt="${escapeHtml(item.label)}" loading="lazy" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3135/3135715.png'">
+                        <div class="card-label">${escapeHtml(item.label)}</div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        // Render category navigation
+        const navEl = document.getElementById('categoryNav');
+        if (navEl) {
+            const categories = Object.keys(database);
+            navEl.innerHTML = categories.map(cat => `
+                <button class="folder-btn ${currentCategory === cat ? 'active' : ''}" 
+                        onclick="setCategory('${cat.replace(/'/g, "\\'")}')">${escapeHtml(cat)}</button>
+            `).join('');
+        }
+
+        // Render library grid
+        const libEl = document.getElementById('libraryGrid');
+        if (libEl) {
+            const currentCards = database[currentCategory] || [];
+            let libHtml = currentCards.map((item, idx) => `
+                <div class="lib-card-wrapper">
+                    <div class="del-btn" onclick="deleteFromLibrary('${currentCategory.replace(/'/g, "\\'")}', ${idx}, event)">✕</div>
+                    <div class="lib-card" onclick='addToFirstEmptySlot(${JSON.stringify(item).replace(/'/g, "&#39;")})'>
+                        <img src="${escapeHtml(item.img)}" alt="${escapeHtml(item.label)}" loading="lazy" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3135/3135715.png'">
+                        <div class="card-label">${escapeHtml(item.label)}</div>
+                    </div>
+                </div>
+            `).join('');
+            libHtml += `<div class="add-custom-btn" onclick="addCustomCard()">+ Add</div>`;
+            libEl.innerHTML = libHtml;
+        }
+        
+        updateSlotCounter();
+    }
+
+    // Global functions for onclick handlers
+    window.tryAddHint = function() {
+        showToast("📌 Tap any card from the library below to add it to the sequence", 1500);
     };
 
     window.setCategory = function(cat) {
         if (database[cat]) {
-            state.currentCategory = cat;
+            currentCategory = cat;
             render();
         } else {
-            // recreate if missing
+            // Create category if missing
             database[cat] = [];
-            persistDB();
-            state.currentCategory = cat;
+            saveDatabase();
+            currentCategory = cat;
             render();
         }
     };
@@ -574,24 +576,23 @@
         const cardName = database[category][index].label;
         if (confirm(`Delete "${cardName}" from ${category}?`)) {
             database[category].splice(index, 1);
-            // if category becomes empty, keep empty array
-            persistDB();
+            saveDatabase();
             render();
             showToast(`🗑️ Removed "${cardName}"`, 1200);
         }
     };
 
-    window.addLinkCard = function() {
+    window.addCustomCard = function() {
         let label = prompt("Card name (e.g., 'Bathroom'):");
         if (!label || label.trim() === "") {
             showToast("Name required", 1000);
             return;
         }
-        let imgUrl = prompt("Paste image URL (png/jpg):");
+        let imgUrl = prompt("Paste image URL (or leave blank for default):", "https://cdn-icons-png.flaticon.com/512/3135/3135715.png");
         if (!imgUrl || imgUrl.trim() === "") {
-            imgUrl = "https://cdn-icons-png.flaticon.com/512/3135/3135715.png"; // fallback icon
+            imgUrl = "https://cdn-icons-png.flaticon.com/512/3135/3135715.png";
         }
-        // validate url basic
+        // Basic URL validation
         if (!imgUrl.startsWith('http')) {
             if (confirm("URL doesn't look valid. Use default image?")) {
                 imgUrl = "https://cdn-icons-png.flaticon.com/512/3135/3135715.png";
@@ -604,40 +605,43 @@
             label: label.trim(),
             img: imgUrl
         };
-        if (!database[state.currentCategory]) {
-            database[state.currentCategory] = [];
+        if (!database[currentCategory]) {
+            database[currentCategory] = [];
         }
-        database[state.currentCategory].push(newCard);
-        persistDB();
+        database[currentCategory].push(newCard);
+        saveDatabase();
         render();
-        showToast(`➕ "${label}" added`, 1200);
+        showToast(`➕ "${label}" added to ${currentCategory}`, 1200);
     };
 
     window.addToFirstEmptySlot = function(card) {
         if (!card) return;
-        const emptyIndex = state.routine.findIndex(slot => slot === null);
+        const emptyIndex = routine.findIndex(slot => slot === null);
         if (emptyIndex !== -1) {
-            state.routine[emptyIndex] = { ...card, id: card.id + "_seq_" + Date.now() };
+            routine[emptyIndex] = { ...card, id: card.id + "_seq_" + Date.now() };
+            saveRoutine();
             render();
             showToast(`✅ Added "${card.label}" to sequence`, 800);
         } else {
-            showToast(`⚠️ Sequence is full (${SLOT_COUNT}/6). Clear a slot first.`, 1500);
+            showToast(`⚠️ Sequence is full (${SLOT_COUNT}/6). Tap a slot to remove one first.`, 1500);
         }
     };
 
     window.removeFromSlot = function(index) {
-        if (state.routine[index]) {
-            const removedLabel = state.routine[index].label;
-            state.routine[index] = null;
+        if (routine[index]) {
+            const removedLabel = routine[index].label;
+            routine[index] = null;
+            saveRoutine();
             render();
             showToast(`Removed "${removedLabel}"`, 800);
         }
     };
 
     window.clearRoutine = function() {
-        if (state.routine.some(s => s !== null)) {
+        if (routine.some(s => s !== null)) {
             if (confirm("Clear entire visual sequence?")) {
-                state.routine = Array(SLOT_COUNT).fill(null);
+                routine = Array(SLOT_COUNT).fill(null);
+                saveRoutine();
                 render();
                 showToast("🧹 Sequence cleared", 1000);
             }
@@ -646,115 +650,126 @@
         }
     };
 
-    // Share + compress
-    function sendToPartner() {
-        // create backup before share
-        const exportData = {
-            r: state.routine,
-            db: database,
-            version: "2.0"
-        };
+    // Share function - creates a shareable link
+    window.sendToPartner = function() {
         try {
-            const jsonStr = JSON.stringify(exportData);
-            // base64 encode safely
-            const base64Encoded = btoa(unescape(encodeURIComponent(jsonStr)));
-            const shareUrl = window.location.href.split('?')[0] + "?data=" + encodeURIComponent(base64Encoded);
+            // Prepare data for sharing
+            const shareData = {
+                r: routine,
+                db: database,
+                v: 2
+            };
+            
+            // Convert to JSON and then to base64
+            const jsonStr = JSON.stringify(shareData);
+            const base64Str = btoa(encodeURIComponent(jsonStr).replace(/%([0-9A-F]{2})/g, function(match, p1) {
+                return String.fromCharCode(parseInt(p1, 16));
+            }));
+            
+            // Create shareable URL
+            const currentUrl = window.location.href.split('?')[0];
+            const shareUrl = currentUrl + "?data=" + encodeURIComponent(base64Str);
             
             // Copy to clipboard
-            navigator.clipboard.writeText(shareUrl).then(() => {
-                showToast("🔗 Link copied! Share on WhatsApp", 2000);
-                // optional: open WhatsApp? user decides
-                if (confirm("Open WhatsApp to share the link?")) {
-                    const waUrl = `https://wa.me/?text=${encodeURIComponent("📋 Visual schedule: " + shareUrl)}`;
-                    window.open(waUrl, '_blank');
-                }
-            }).catch(() => {
-                // fallback
-                const textarea = document.createElement('textarea');
-                textarea.value = shareUrl;
-                document.body.appendChild(textarea);
-                textarea.select();
-                document.execCommand('copy');
-                document.body.removeChild(textarea);
-                showToast("🔗 Link copied! (legacy)", 1500);
-            });
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(shareUrl).then(() => {
+                    showToast("🔗 Link copied! Share on WhatsApp", 2000);
+                    // Ask if user wants to open WhatsApp
+                    if (confirm("Open WhatsApp to share the link with someone?")) {
+                        const waUrl = `https://wa.me/?text=${encodeURIComponent("📋 Visual schedule: " + shareUrl)}`;
+                        window.open(waUrl, '_blank');
+                    }
+                }).catch(() => {
+                    fallbackCopy(shareUrl);
+                });
+            } else {
+                fallbackCopy(shareUrl);
+            }
         } catch(e) {
-            console.error(e);
+            console.error("Share error:", e);
             showToast("Error creating share link", 1500);
+        }
+    };
+    
+    function fallbackCopy(text) {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.top = '-1000px';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        showToast("🔗 Link copied! Share on WhatsApp", 1500);
+        if (confirm("Open WhatsApp to share the link?")) {
+            const waUrl = `https://wa.me/?text=${encodeURIComponent("📋 Visual schedule: " + text)}`;
+            window.open(waUrl, '_blank');
         }
     }
 
     // Load shared data from URL
     function loadSharedData() {
         const params = new URLSearchParams(window.location.search);
-        const sharedData = params.get('data');
-        if (sharedData) {
+        const encodedData = params.get('data');
+        if (encodedData) {
             try {
-                const decodedJson = decodeURIComponent(sharedData);
-                const jsonString = atob(decodedJson);
-                const imported = JSON.parse(jsonString);
+                // Decode base64
+                let base64Str = decodeURIComponent(encodedData);
+                let jsonStr = atob(base64Str);
+                const imported = JSON.parse(jsonStr);
+                
                 if (imported && imported.r && imported.db) {
-                    state.routine = imported.r.slice(0, SLOT_COUNT);
-                    // fill empty slots if needed
-                    while(state.routine.length < SLOT_COUNT) state.routine.push(null);
+                    // Load routine
+                    routine = imported.r.slice(0, SLOT_COUNT);
+                    while (routine.length < SLOT_COUNT) routine.push(null);
+                    
+                    // Load database
                     database = imported.db;
-                    persistDB();
-                    // set current category to first available
+                    saveDatabase();
+                    saveRoutine();
+                    
+                    // Set current category
                     const firstCat = Object.keys(database)[0];
-                    if (firstCat) state.currentCategory = firstCat;
+                    if (firstCat) currentCategory = firstCat;
+                    
                     render();
-                    showToast("📲 Shared board loaded!", 2000);
-                    // clean url
-                    window.history.replaceState({}, document.title, window.location.pathname);
+                    showToast("📲 Shared board loaded successfully!", 2000);
+                    
+                    // Clean URL without reloading
+                    const cleanUrl = window.location.href.split('?')[0];
+                    window.history.replaceState({}, document.title, cleanUrl);
                 } else {
-                    console.warn("invalid share");
+                    console.warn("Invalid share data structure");
                 }
             } catch(e) {
-                console.error("Failed to load share", e);
-                showToast("Could not load shared board", 1500);
+                console.error("Failed to load shared data:", e);
+                showToast("Could not load shared board - invalid link", 2000);
             }
         }
     }
-
-    // Optional: Drag & drop (simple enhancements)
-    function initDragDrop() {
-        const libItems = document.getElementById('libraryGrid');
-        if (!libItems) return;
-        // library cards use native drag? not needed, but add friendly pointer
-    }
-
-    // Save routine on unload?
-    window.addEventListener('beforeunload', () => {
-        // optional autosave
-        localStorage.setItem('routine_backup', JSON.stringify(state.routine));
-    });
     
-    function restoreRoutineBackup() {
-        const saved = localStorage.getItem('routine_backup');
-        if (saved) {
-            try {
+    // Load saved routine from localStorage
+    function loadSavedRoutine() {
+        try {
+            const saved = localStorage.getItem('routine_backup_v2');
+            if (saved) {
                 const parsed = JSON.parse(saved);
                 if (Array.isArray(parsed) && parsed.length === SLOT_COUNT) {
-                    state.routine = parsed;
-                    render();
+                    routine = parsed;
                 }
-                localStorage.removeItem('routine_backup');
-            } catch(e) {}
-        }
+            }
+        } catch(e) { console.warn(e); }
     }
 
-    // ensure category exists after DB modification
-    window.addEventListener('load', () => {
-        loadSharedData();
-        restoreRoutineBackup();
-        render();
-        // extra consistency: if current category missing, pick first
-        if (!database[state.currentCategory]) {
-            const keys = Object.keys(database);
-            if (keys.length) state.currentCategory = keys[0];
-            render();
-        }
+    // Auto-save routine when page closes
+    window.addEventListener('beforeunload', function() {
+        saveRoutine();
     });
+
+    // Initialize
+    loadSavedRoutine();
+    loadSharedData();
+    render();
 </script>
 </body>
 </html>
